@@ -1,6 +1,6 @@
-from lab_python_oop.rectangle import Rectangle
-from lab_python_oop.circle import Circle
-from lab_python_oop.square import Square
+from lab2.rectangle import Rectangle
+from lab2.circle import Circle
+from lab2.square import Square
 import numpy as np # Импортируем установленный пакет
 
 def main():
