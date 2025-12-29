@@ -16,7 +16,6 @@ import (
 )
 
 var (
-	// Оставляем просто тип string, без значений
 	BotToken   string
 	WebhookURL string
 )
@@ -40,10 +39,9 @@ var (
 )
 
 // Создаем клавиатуру для меню
-// Создаем клавиатуру для меню
 var numericKeyboard = tgbotapi.NewReplyKeyboard(
 	tgbotapi.NewKeyboardButtonRow(
-		tgbotapi.NewKeyboardButton("➕ Новая задача"), // Новая кнопка в самом верху
+		tgbotapi.NewKeyboardButton("➕ Новая задача"),
 	),
 	tgbotapi.NewKeyboardButtonRow(
 		tgbotapi.NewKeyboardButton("📋 Все задачи"),
@@ -55,27 +53,27 @@ var numericKeyboard = tgbotapi.NewReplyKeyboard(
 	),
 )
 
-// Инициализация
+// Инициализация конфигурации
 func init() {
 	// 1. Пытаемся загрузить .env файл
 	if err := godotenv.Load(); err != nil {
-		log.Println("Не найден файл .env, берем переменные окружения")
+		log.Println("Не найден файл .env, используются переменные окружения")
 	}
 
-	// 2. Читаем настройки из файла
+	// 2. Читаем настройки
 	BotToken = os.Getenv("BOT_TOKEN")
 	WebhookURL = os.Getenv("WEBHOOK_URL")
 
-	// 3. Если забыли заполнить .env - паникуем
+	// 3. Проверка обязательных переменных
 	if BotToken == "" || WebhookURL == "" {
-		log.Fatal("ERROR: BOT_TOKEN или WEBHOOK_URL не заданы в .env файле")
+		log.Fatal("ERROR: BOT_TOKEN или WEBHOOK_URL не заданы")
 	}
 
-	// 4. Инициализация хранилища (старый код)
+	// 4. Инициализация хранилища
 	tasks = make(map[int]*Task)
 	nextID = 1
 
-	// 5. Инициализация состояний пользователей (для диалогов)
+	// 5. Инициализация состояний пользователей
 	userStates = make(map[int64]bool)
 }
 
@@ -87,8 +85,6 @@ func startTaskBot(ctx context.Context) error {
 		return fmt.Errorf("NewBotAPI failed: %w", err)
 	}
 
-	bot.Debug = true // Раскомментируйте для отладки
-
 	wh, err := tgbotapi.NewWebhook(WebhookURL)
 	if err != nil {
 		return fmt.Errorf("NewWebhook failed: %w", err)
@@ -99,27 +95,19 @@ func startTaskBot(ctx context.Context) error {
 		return fmt.Errorf("SetWebhook failed: %w", err)
 	}
 
-	// bot.ListenForWebhook("/") регистрирует http.Handler в DefaultServeMux
-	// Поэтому нам нужно запустить сервер на адресе из WebhookURL (тесты используют 127.0.0.1:8081)
 	updates := bot.ListenForWebhook("/")
 
-	// Извлекаем адрес из WebhookURL (например, 127.0.0.1:8081)
-	// Тестовый WebhookURL: "http://127.0.0.1:8081"
-	// В реальном боте здесь может быть ":8080" или другой порт
-	addr := "127.0.0.1:8081" // Захардкожено для тестов
-	if !strings.Contains(WebhookURL, "127.0.0.1:8081") {
-		// Логика для реального запуска (например, из переменной окружения PORT)
-		// Для этого ДЗ оставим как есть, тесты пройдут.
-		// Для реального запуска, например на Heroku:
-		// port := os.Getenv("PORT")
-		// if port == "" {
-		// 	 port = "8080"
-		// }
-		// addr = ":" + port
-		// log.Printf("Starting server on %s", addr)
-	}
+	// Настройка адреса сервера.
+	// В локальной среде или при специфической конфигурации сети адрес может отличаться.
+
+    addr := ":8081"
+
+	if port := os.Getenv("PORT"); port != "" {
+        addr = ":" + port
+    }
 
 	srv := &http.Server{Addr: addr}
+	log.Printf("Starting server on %s", addr)
 
 	// Запускаем сервер в отдельной горутине
 	go func() {
@@ -142,8 +130,6 @@ func startTaskBot(ctx context.Context) error {
 }
 
 // handleUpdate - главный обработчик входящих сообщений
-// handleUpdate - главный обработчик входящих сообщений
-// handleUpdate - главный обработчик входящих сообщений
 func handleUpdate(update tgbotapi.Update) {
 	if update.Message == nil {
 		return
@@ -157,9 +143,7 @@ func handleUpdate(update tgbotapi.Update) {
 
 	text := msg.Text
 
-	// --- ЛОГИКА ДИАЛОГА (НОВАЯ ЧАСТЬ) ---
-
-	// 1. Если нажали кнопку "Новая задача"
+	// 1. Если нажать кнопку "Новая задача"
 	if text == "➕ Новая задача" {
 		tasksMu.Lock()
 		userStates[user.ID] = true // Включаем режим ожидания
@@ -193,11 +177,9 @@ func handleUpdate(update tgbotapi.Update) {
 		}
 	}
 
-	// --- КОНЕЦ НОВОЙ ЧАСТИ ---
-
 	var cmd, args string
 
-	// Разбираем кнопки меню
+	// Кнопки меню
 	switch text {
 	case "📋 Все задачи":
 		cmd = "/tasks"
@@ -276,7 +258,6 @@ func sendMessage(chatID int64, text string) {
 		return
 	}
 	msg := tgbotapi.NewMessage(chatID, text)
-	// В реальном приложении стоит обрабатывать ошибку
 	bot.Send(msg)
 }
 
@@ -285,7 +266,7 @@ func sendMessage(chatID int64, text string) {
 // handleNew создает новую задачу
 func handleNew(user *tgbotapi.User, chatID int64, title string) {
 	if title == "" {
-		sendMessage(chatID, "Задача не может быть пустой. Пример: /new Сделать ДЗ")
+		sendMessage(chatID, "Задача не может быть пустой. Пример: /new Купить продукты")
 		return
 	}
 
@@ -383,7 +364,6 @@ func handleOwner(viewerID int64, chatID int64) {
 
 // formatTask форматирует задачу в строку для вывода
 // context: "tasks", "my", "owner" (влияет на отображение assignee)
-// formatTask форматирует задачу в строку для вывода
 func formatTask(task *Task, viewerID int64, context string) string {
 	var b strings.Builder
 
@@ -399,7 +379,7 @@ func formatTask(task *Task, viewerID int64, context string) string {
 	b.WriteString(fmt.Sprintf("👤 Автор: @%s\n", task.OwnerUser.UserName))
 
 	// 2. Статус и Кнопки действий
-	b.WriteString("--------------------\n") // Разделитель
+	b.WriteString("--------------------\n")
 
 	showAssignee := (context == "tasks")
 
@@ -449,16 +429,16 @@ func handleAssign(user *tgbotapi.User, chatID int64, args string) {
 	// 1. Отвечаем тому, кто назначил
 	sendMessage(chatID, fmt.Sprintf(`Задача "%s" назначена на вас`, task.Title))
 
-	// 2. Логика уведомлений (согласно тестам 5 и 6)
+	// 2. Логика уведомлений
 	notificationSent := false
 
-	// 2a. Уведомляем старого исполнителя (если он был и это не мы)
+	// 2a. Уведомляем старого исполнителя
 	if oldAssignee != nil && oldAssignee.ID != user.ID {
 		sendMessage(oldAssignee.ID, fmt.Sprintf(`Задача "%s" назначена на @%s`, task.Title, user.UserName))
 		notificationSent = true
 	}
 
-	// 2b. Если старого исполнителя не было, уведомляем владельца (если это не мы)
+	// 2b. Если старого исполнителя не было, уведомляем владельца
 	if !notificationSent && task.OwnerID != user.ID {
 		sendMessage(task.OwnerID, fmt.Sprintf(`Задача "%s" назначена на @%s`, task.Title, user.UserName))
 	}
@@ -481,7 +461,7 @@ func handleUnassign(user *tgbotapi.User, chatID int64, args string) {
 		return
 	}
 
-	// Проверяем, что задачу снимает текущий исполнитель (тест 9)
+	// Проверяем, что задачу снимает текущий исполнитель
 	if task.Assignee == nil || task.Assignee.ID != user.ID {
 		sendMessage(chatID, "Задача не на вас")
 		return
@@ -490,7 +470,7 @@ func handleUnassign(user *tgbotapi.User, chatID int64, args string) {
 	task.Assignee = nil
 	sendMessage(chatID, "Принято")
 
-	// Уведомляем владельца (если это не мы) (тест 10)
+	// Уведомляем владельца
 	if task.OwnerID != user.ID {
 		sendMessage(task.OwnerID, fmt.Sprintf(`Задача "%s" осталась без исполнителя`, task.Title))
 	}
@@ -509,13 +489,9 @@ func handleResolve(user *tgbotapi.User, chatID int64, args string) {
 
 	task, ok := tasks[taskID]
 	if !ok {
-		// Задача могла быть уже удалена, но тесты этого не проверяют
-		// sendMessage(chatID, "Задача не найдена")
 		return
 	}
 
-	// По аналогии с unassign, проверяем, что задачу решает исполнитель
-	// Тесты (7, 8) показывают кнопки /resolve только исполнителю
 	if task.Assignee == nil || task.Assignee.ID != user.ID {
 		sendMessage(chatID, "Задача не на вас")
 		return
@@ -526,16 +502,14 @@ func handleResolve(user *tgbotapi.User, chatID int64, args string) {
 
 	sendMessage(chatID, fmt.Sprintf(`Задача "%s" выполнена`, task.Title))
 
-	// Уведомляем владельца (если это не мы) (тест 12)
+	// Уведомляем владельца
 	if task.OwnerID != user.ID {
 		sendMessage(task.OwnerID, fmt.Sprintf(`Задача "%s" выполнена @%s`, task.Title, user.UserName))
 	}
 }
 
-// main - точка входа (не меняем)
 func main() {
-	err := startTaskBot(context.Background())
-	if err != nil {
-		panic(err)
+	if err := startTaskBot(context.Background()); err != nil {
+		log.Fatal(err)
 	}
 }
